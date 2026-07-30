@@ -73,8 +73,13 @@ export const PAYMENT_TERMS_LABELS: Record<PaymentTerms, string> = {
 };
 
 export const WORKFLOW_STAGE_LABELS: Record<WorkflowStage, string> = {
-  [WorkflowStage.PENDING]: "Pending",
+  [WorkflowStage.PENDING]: "New lead",
   [WorkflowStage.CONTACTED]: "Contacted",
+  [WorkflowStage.QUALIFIED]: "Qualified",
+  [WorkflowStage.PROPOSAL_SENT]: "Proposal sent",
+  [WorkflowStage.NEGOTIATION]: "Negotiation",
+  [WorkflowStage.CLOSED_WON]: "Closed won",
+  [WorkflowStage.CLOSED_LOST]: "Closed lost",
 };
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {

@@ -8,6 +8,7 @@ import { cx } from "@/components/ui/primitives";
 
 const LINKS = [
   { href: "/companies", label: "Companies" },
+  { href: "/pipeline", label: "Pipeline" },
   { href: "/notifications", label: "Notifications" },
   { href: "/settings/assignment-rules", label: "Assignment rules" },
 ];

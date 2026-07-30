@@ -222,6 +222,11 @@ enum PaymentTerms {
 enum WorkflowStage {
   PENDING
   CONTACTED
+  QUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
 }
 
 enum AssignmentSource {

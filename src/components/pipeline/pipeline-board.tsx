@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { WorkflowStage } from "@/generated/prisma/enums";
 import { WORKFLOW_STAGE_LABELS, formatCurrency } from "@/lib/labels";
 import { TIER_SHORT_LABELS } from "@/server/tiering/calculate-tier";
-import { WORKFLOW_STAGE_ORDER } from "@/server/workflow/stages";
+import { WORKFLOW_STAGE_ORDER, isTerminalStage } from "@/server/workflow/stages";
 import type { PipelineCard } from "@/server/companies/pipeline";
 import { Button } from "@/components/ui/buttons";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -144,6 +144,34 @@ export function PipelineBoard({
     return map;
   }, [filtered]);
 
+  /**
+   * Leads per agent, derived from the same filtered set the board is showing so
+   * the two never disagree. "Live" means still in play — closed won and lost are
+   * excluded, because a rep's workload is what hasn't landed yet.
+   */
+  const agentRows = useMemo(() => {
+    const live = filtered.filter((c) => !isTerminalStage(c.workflowStage));
+    const rows = new Map<string, { name: string; count: number; acv: number }>();
+
+    live.forEach((c) => {
+      const key = c.ownerId ?? "__unassigned";
+      const row = rows.get(key) ?? {
+        name: c.ownerName ?? "Unassigned",
+        count: 0,
+        acv: 0,
+      };
+      row.count += 1;
+      row.acv += Number(c.acv ?? 0);
+      rows.set(key, row);
+    });
+
+    return [...rows.entries()]
+      .map(([id, row]) => ({ id, ...row }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [filtered]);
+
+  const busiestAgent = agentRows[0]?.count ?? 0;
+
   const hasFilters =
     repFilter.length > 0 || tierFilter.length > 0 || dateFrom !== "" || dateTo !== "";
 
@@ -199,7 +227,7 @@ export function PipelineBoard({
         <div>
           <h1 className="text-lg font-semibold">Pipeline</h1>
           <p className="text-sm text-[var(--muted)]">
-            Drag a card to move an account between stages.
+            Live opportunities by stage. Drag a card to move an account.
           </p>
         </div>
 
@@ -277,6 +305,44 @@ export function PipelineBoard({
           .
         </p>
       )}
+
+      <section className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] shadow-sm">
+        <header className="border-b border-[var(--border-subtle)] px-4 py-3">
+          <h2 className="text-sm font-semibold">Leads per agent</h2>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">
+            Open opportunities by account owner. Closed won and lost are excluded, and the
+            filters above apply.
+          </p>
+        </header>
+
+        {agentRows.length === 0 ? (
+          <p className="px-4 py-6 text-center text-xs text-[var(--muted)]">
+            No open opportunities match the current filters.
+          </p>
+        ) : (
+          <ul className="divide-y divide-[var(--border-subtle)]">
+            {agentRows.map((row) => (
+              <li key={row.id} className="flex items-center gap-3 px-4 py-2.5">
+                <span className="w-44 shrink-0 truncate text-sm">{row.name}</span>
+                <span className="h-2 flex-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]">
+                  <span
+                    className="block h-full rounded-full bg-[var(--accent)]"
+                    style={{
+                      width: `${busiestAgent === 0 ? 0 : (row.count / busiestAgent) * 100}%`,
+                    }}
+                  />
+                </span>
+                <span className="w-16 shrink-0 text-right text-sm font-semibold tabular-nums">
+                  {row.count}
+                </span>
+                <span className="w-28 shrink-0 text-right text-xs text-[var(--muted)] tabular-nums">
+                  {formatCurrency(row.acv, displayCurrency)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <div className="flex gap-4 overflow-x-auto pb-4">
         {WORKFLOW_STAGE_ORDER.map((stage) => {

@@ -48,10 +48,16 @@ framework preset Next.js. Set `DATABASE_URL` and `AUTH_SECRET` — at least 32
 characters — as environment variables for both Production and Preview.
 
 Vercel runs `vercel-build` in preference to `build`, which adds
-`prisma migrate deploy` so every deployment applies pending migrations. Point
-`DATABASE_URL` at a **direct** connection, not a transaction-pooled one
-(Supabase port 5432, not 6543; Neon's non-pooled host) — migrations cannot run
-over PgBouncer in transaction mode.
+`prisma migrate deploy` so every deployment applies pending migrations.
+`migrate deploy` holds a Postgres advisory lock for the run, and that isn't
+reliable over a transaction-mode pooler (Neon's `-pooler` host, Supabase's
+port 6543) — the lock can be left stuck, and every later deploy times out on
+`P1002` waiting to acquire it. If `DATABASE_URL` is a pooled connection, also
+set `DIRECT_URL` to the same database's direct connection string (Neon: same
+host minus `-pooler`; Supabase: port 5432 instead of 6543) — `prisma.config.ts`
+uses it for migrations while the app and seed script keep using the pooled
+`DATABASE_URL` for everything else. Skip `DIRECT_URL` if `DATABASE_URL` is
+already direct, e.g. a self-hosted Postgres.
 
 Migrations create the schema but no rows, so seed the database once before the
 first sign-in, otherwise every login is a legitimate 401:

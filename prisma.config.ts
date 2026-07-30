@@ -9,6 +9,13 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Migrations need a direct connection: `migrate deploy` holds a Postgres
+    // advisory lock for the duration of the run, and that doesn't survive a
+    // transaction-mode pooler (Neon's `-pooler` host, Supabase's 6543) --
+    // the lock can be left stuck, and every later deploy times out on P1002
+    // waiting to acquire it. DIRECT_URL falls back to DATABASE_URL so a setup
+    // that's already on a direct connection (e.g. local Postgres) needs no
+    // extra variable.
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });

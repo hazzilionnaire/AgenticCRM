@@ -6,9 +6,7 @@ import { SESSION_COOKIE_NAME } from "@/lib/session-cookie";
  * signature is verified in `getSession()` on the server, so a forged cookie gets
  * past middleware but never past a page or route handler.
  */
-// `/api/health` is a temporary deployment diagnostic — drop it from this list
-// and delete the route once the deployment is healthy.
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/health"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

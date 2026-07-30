@@ -1,11 +1,6 @@
-import { listPipeline } from "@/server/companies/pipeline";
-import { listReps } from "@/server/reference/service";
-import { PipelineBoard } from "@/components/pipeline/pipeline-board";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function PipelinePage() {
-  const [{ cards, capped }, reps] = await Promise.all([listPipeline(), listReps()]);
-
-  return <PipelineBoard cards={cards} reps={reps} capped={capped} />;
+/** The board moved to Home. Kept so existing links and bookmarks still land. */
+export default function PipelinePage() {
+  redirect("/home");
 }

@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/buttons";
 import { cx } from "@/components/ui/primitives";
 
 const LINKS = [
+  { href: "/home", label: "Home" },
   { href: "/companies", label: "Companies" },
-  { href: "/pipeline", label: "Pipeline" },
   { href: "/notifications", label: "Notifications" },
   { href: "/settings/assignment-rules", label: "Assignment rules" },
 ];

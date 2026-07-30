@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-[var(--border-subtle)] bg-[var(--surface)]/85 backdrop-blur">
         <div className="mx-auto flex max-w-[1400px] items-center gap-6 px-5 py-3">
-          <Link href="/companies" className="text-sm font-semibold tracking-tight">
+          <Link href="/home" className="text-sm font-semibold tracking-tight">
             AgenticCRM
           </Link>
           <NavBar user={user} unread={unread} />

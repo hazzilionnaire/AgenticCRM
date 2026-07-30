@@ -1,0 +1,349 @@
+// AgenticCRM — Phase 1 data model.
+//
+// Design notes:
+//  - `Company.tier` is DERIVED (see src/server/tiering/calculate-tier.ts). It is
+//    persisted so the list view can sort/filter on it cheaply, but it is stripped
+//    from every client payload and recomputed in the same transaction as any write
+//    touching employeeBand / annualRevenueExact / annualRevenueBand.
+//  - Phase 2 (AI scoring, enrichment) fields are present but unused, so those
+//    features land without a schema rewrite.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────── Users / reps ───────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         UserRole @default(REP)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedCompanies   Company[]              @relation("AccountOwner")
+  collaborations   CompanyCollaborator[]  @relation("CollaboratorUser")
+  collaboratorAdds CompanyCollaborator[]  @relation("CollaboratorAddedBy")
+  poolMemberships  AssignmentRuleMember[]
+  activityLogs     ActivityLog[]
+  notifications    Notification[]         @relation("NotificationRecipient")
+  suggestedIn      Notification[]         @relation("NotificationSuggestedUser")
+
+  @@index([isActive])
+}
+
+enum UserRole {
+  REP
+  ADMIN
+}
+
+// ───────────────────────────── Industry lookup ──────────────────────────────
+// A table rather than an enum so verticals can be added without a migration.
+
+model Industry {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  name      String
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
+  companies Company[]
+
+  @@index([isActive, sortOrder])
+}
+
+// ──────────────────────────────── Company ───────────────────────────────────
+
+model Company {
+  id String @id @default(cuid())
+
+  // ── Core identity ──
+  legalName     String
+  dbaName       String?
+  industryId    String?
+  industry      Industry?   @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  companyType   CompanyType @default(PROSPECT)
+  parentId      String?
+  parent        Company?    @relation("CorporateHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  subsidiaries  Company[]   @relation("CorporateHierarchy")
+  dunsNumber    String?
+  taxId         String?
+  websiteDomain String?
+
+  // ── Size & segmentation ──
+  // Exact revenue wins over the band wherever both are present.
+  employeeBand       EmployeeBand?
+  annualRevenueExact Decimal?       @db.Decimal(18, 2)
+  annualRevenueBand  RevenueBand?
+  currency           String         @default("USD")
+  tier               Int? // 1–4, derived — never accepted from a client
+  tierCalculatedAt   DateTime?
+  locationCount      Int?
+  ownershipType      OwnershipType?
+
+  // ── Contact & location ──
+  billingStreet1  String?
+  billingStreet2  String?
+  billingCity     String?
+  billingState    String?
+  billingPostal   String?
+  billingCountry  String?
+  shippingStreet1 String?
+  shippingStreet2 String?
+  shippingCity    String?
+  shippingState   String?
+  shippingPostal  String?
+  shippingCountry String?
+  phone           String?
+  emailDomain     String?
+  timeZone        String? // IANA, e.g. "America/Toronto"
+
+  // ── Relationship & lifecycle ──
+  ownerId         String?
+  owner           User?             @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerAssignedBy AssignmentSource? // guards auto-assignment from stealing manual owners
+  ownerAssignedAt DateTime?
+  lifecycleStage  LifecycleStage    @default(LEAD)
+  accountStatus   AccountStatus     @default(ACTIVE)
+  customerSince   DateTime?
+  leadSource      LeadSource?
+
+  // ── Financial ──
+  tcv          Decimal?      @db.Decimal(18, 2)
+  acv          Decimal?      @db.Decimal(18, 2)
+  paymentTerms PaymentTerms?
+  creditRating String?
+  renewalDate  DateTime?
+
+  // ── Engagement rollups (computed; read-only in the UI) ──
+  lastActivityAt   DateTime?
+  openDealsCount   Int       @default(0)
+  openTicketsCount Int       @default(0)
+  healthScore      Int? // null in Phase 1 — no CS platform integration yet
+  npsScore         Int? // null in Phase 1
+
+  // ── Workflow ──
+  workflowStage            WorkflowStage @default(PENDING)
+  workflowStageChangedAt   DateTime?
+  workflowStageChangedById String?
+
+  // ── Phase 2 placeholders (unused in Phase 1) ──
+  score               Int?
+  scoreUpdatedAt      DateTime?
+  enrichmentSource    String?
+  enrichmentUpdatedAt DateTime?
+  enrichmentData      Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete
+
+  activityLogs  ActivityLog[]
+  collaborators CompanyCollaborator[]
+  notifications Notification[]
+
+  @@index([legalName])
+  @@index([industryId])
+  @@index([tier])
+  @@index([employeeBand])
+  @@index([annualRevenueBand])
+  @@index([lifecycleStage])
+  @@index([ownerId])
+  @@index([deletedAt])
+  @@index([workflowStage])
+}
+
+enum CompanyType {
+  CUSTOMER
+  PROSPECT
+  PARTNER
+  VENDOR
+}
+
+enum EmployeeBand {
+  SIZE_1_49
+  SIZE_50_249
+  SIZE_250_999
+  SIZE_1000_PLUS
+}
+
+enum RevenueBand {
+  UNDER_10M
+  FROM_10M_TO_50M
+  FROM_50M_TO_1B
+  OVER_1B
+}
+
+enum OwnershipType {
+  PUBLIC
+  PRIVATE
+  PE_BACKED
+  FRANCHISE
+}
+
+enum LifecycleStage {
+  LEAD
+  PROSPECT
+  CUSTOMER
+  CHURNED
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  AT_RISK
+}
+
+enum LeadSource {
+  REFERRAL
+  OUTBOUND
+  INBOUND
+  OTHER
+}
+
+enum PaymentTerms {
+  DUE_ON_RECEIPT
+  NET_15
+  NET_30
+  NET_45
+  NET_60
+  NET_90
+}
+
+// Room to grow: QUALIFIED, MEETING_SET, etc. slot in without touching call sites,
+// which read the ordered stage list from src/server/workflow/stages.ts.
+enum WorkflowStage {
+  PENDING
+  CONTACTED
+}
+
+enum AssignmentSource {
+  AUTO
+  MANUAL
+}
+
+// ────────────── Assignment config (editable in-app, no code change) ─────────────
+
+model AssignmentRule {
+  id       String             @id @default(cuid())
+  tier     Int                @unique // 1–4
+  strategy AssignmentStrategy @default(ROUND_ROBIN)
+  isActive Boolean            @default(true)
+  cursor   Int                @default(0) // round-robin pointer, advanced transactionally
+
+  members AssignmentRuleMember[]
+}
+
+model AssignmentRuleMember {
+  id        String         @id @default(cuid())
+  ruleId    String
+  rule      AssignmentRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sortOrder Int            @default(0)
+  isActive  Boolean        @default(true)
+
+  @@unique([ruleId, userId])
+  @@index([ruleId, sortOrder])
+}
+
+enum AssignmentStrategy {
+  ROUND_ROBIN
+  FIXED
+}
+
+// ─────────────────────────────── Collaborators ──────────────────────────────
+// Created when an owner accepts the support rep proposed after a tier change.
+
+model CompanyCollaborator {
+  id        String           @id @default(cuid())
+  companyId String
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User             @relation("CollaboratorUser", fields: [userId], references: [id], onDelete: Cascade)
+  role      CollaboratorRole @default(TIER_SUPPORT)
+  addedById String?
+  addedBy   User?            @relation("CollaboratorAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  createdAt DateTime         @default(now())
+
+  @@unique([companyId, userId])
+  @@index([userId])
+}
+
+enum CollaboratorRole {
+  TIER_SUPPORT
+}
+
+// ──────────────────────────────── Notifications ─────────────────────────────
+
+model Notification {
+  id        String             @id @default(cuid())
+  userId    String
+  user      User               @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  companyId String?
+  company   Company?           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  status    NotificationStatus @default(UNREAD)
+  title     String
+  body      String
+
+  // For TIER_CHANGED_SUPPORT_OFFER: the rep proposed as tier support.
+  suggestedUserId String?
+  suggestedUser   User?   @relation("NotificationSuggestedUser", fields: [suggestedUserId], references: [id], onDelete: SetNull)
+
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, status, createdAt])
+}
+
+enum NotificationType {
+  TIER_CHANGED_SUPPORT_OFFER
+  SUPPORT_OFFER_ACCEPTED
+  COMPANY_ASSIGNED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ACCEPTED
+  DISMISSED
+}
+
+// ──────────────────────────────── Change log ────────────────────────────────
+
+model ActivityLog {
+  id        String       @id @default(cuid())
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actorId   String? // null = system
+  actor     User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  type      ActivityType
+  field     String?
+  oldValue  String?
+  newValue  String?
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  @@index([companyId, createdAt])
+}
+
+enum ActivityType {
+  COMPANY_CREATED
+  FIELD_CHANGED
+  WORKFLOW_STAGE_CHANGED
+  OWNER_ASSIGNED
+  TIER_RECALCULATED
+  COLLABORATOR_ADDED
+  SUPPORT_OFFER_DISMISSED
+  COMPANY_DELETED
+  COMPANY_RESTORED
+}

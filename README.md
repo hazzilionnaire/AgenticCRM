@@ -13,6 +13,7 @@ change log.
 ```bash
 npm install
 cp .env.example .env          # then fill in DATABASE_URL and AUTH_SECRET
+                               # (ANTHROPIC_API_KEY too, for "Draft intro email")
 npm run db:migrate            # create the schema
 npm run db:seed               # 8 reps, 15 industries, 4 assignment pools, 12 companies
 npm run dev
@@ -44,8 +45,10 @@ npm test
 ### Deploying to Vercel
 
 Root Directory must be `./` (the repo root, where `package.json` lives) and the
-framework preset Next.js. Set `DATABASE_URL` and `AUTH_SECRET` — at least 32
-characters — as environment variables for both Production and Preview.
+framework preset Next.js. Set `DATABASE_URL`, `AUTH_SECRET` — at least 32
+characters — and `ANTHROPIC_API_KEY` as environment variables for both
+Production and Preview. Without the last one, every request except
+"Draft intro email" works normally; that one button 500s.
 
 Vercel runs `vercel-build` in preference to `build`, which adds
 `prisma migrate deploy` so every deployment applies pending migrations.

@@ -19,6 +19,7 @@ import {
 import { tierLabel } from "@/server/tiering/calculate-tier";
 import { ActivityFeed, type ActivityEntry } from "@/components/companies/activity-feed";
 import { CompanyForm, type FormRefData } from "@/components/companies/company-form";
+import { DraftEmailButton } from "@/components/companies/draft-email-button";
 import { WorkflowControl } from "@/components/companies/workflow-control";
 import { Button } from "@/components/ui/buttons";
 import { Badge, Card, ReadOnlyField, tierTone } from "@/components/ui/primitives";
@@ -204,6 +205,7 @@ export function CompanyDetailView({
         </div>
 
         <div className="flex gap-2">
+          {!isDeleted && <DraftEmailButton companyId={company.id} />}
           {!isDeleted && (
             <Button variant={editing ? "ghost" : "primary"} onClick={() => setEditing((v) => !v)}>
               {editing ? "Cancel edit" : "Edit"}

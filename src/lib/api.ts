@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { UnauthorizedError } from "@/lib/auth";
+import { AiNotConfiguredError } from "@/server/ai/draft-intro-email";
 import { CompanyError } from "@/server/companies/service";
 import { NotificationError } from "@/server/notifications/service";
 
@@ -22,7 +23,8 @@ export function toErrorResponse(error: unknown) {
   if (
     error instanceof UnauthorizedError ||
     error instanceof CompanyError ||
-    error instanceof NotificationError
+    error instanceof NotificationError ||
+    error instanceof AiNotConfiguredError
   ) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }

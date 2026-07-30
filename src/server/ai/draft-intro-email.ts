@@ -23,10 +23,18 @@ export interface DraftEmailInput {
   websiteDomain: string | null;
 }
 
+export class AiNotConfiguredError extends Error {
+  readonly status = 503;
+  constructor() {
+    super("AI drafting isn't set up yet. Ask an admin to add ANTHROPIC_API_KEY.");
+    this.name = "AiNotConfiguredError";
+  }
+}
+
 function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and fill it in.");
+    throw new AiNotConfiguredError();
   }
   return new Anthropic({ apiKey });
 }

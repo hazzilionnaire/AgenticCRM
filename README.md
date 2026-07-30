@@ -41,6 +41,25 @@ DATABASE_URL="postgresql://…/agenticcrm_test" npx prisma migrate deploy
 npm test
 ```
 
+### Deploying to Vercel
+
+Root Directory must be `./` (the repo root, where `package.json` lives) and the
+framework preset Next.js. Set `DATABASE_URL` and `AUTH_SECRET` — at least 32
+characters — as environment variables for both Production and Preview.
+
+Vercel runs `vercel-build` in preference to `build`, which adds
+`prisma migrate deploy` so every deployment applies pending migrations. Point
+`DATABASE_URL` at a **direct** connection, not a transaction-pooled one
+(Supabase port 5432, not 6543; Neon's non-pooled host) — migrations cannot run
+over PgBouncer in transaction mode.
+
+Migrations create the schema but no rows, so seed the database once before the
+first sign-in, otherwise every login is a legitimate 401:
+
+```bash
+DATABASE_URL="<production url>" npm run db:seed
+```
+
 ---
 
 ## Core behaviour

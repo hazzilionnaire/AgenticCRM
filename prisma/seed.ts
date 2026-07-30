@@ -68,7 +68,46 @@ const POOLS: Record<number, string[]> = {
   4: ["robin.strat@agenticcrm.test", "jamie.ent@agenticcrm.test"],
 };
 
-const COMPANIES = [
+interface CompanySeed {
+  legalName: string;
+  dbaName?: string;
+  industry: string;
+  companyType: CompanyType;
+  employeeBand?: EmployeeBand;
+  annualRevenueExact?: number;
+  annualRevenueBand?: RevenueBand;
+  ownershipType?: OwnershipType;
+  lifecycleStage: LifecycleStage;
+  accountStatus?: AccountStatus;
+  leadSource?: LeadSource;
+  websiteDomain?: string;
+  emailDomain?: string;
+  phone?: string;
+  timeZone?: string;
+  billingCity?: string;
+  billingState?: string;
+  billingCountry?: string;
+  locationCount?: number;
+  tcv?: number;
+  acv?: number;
+  paymentTerms?: PaymentTerms;
+  creditRating?: string;
+  customerSince?: Date;
+  renewalDate?: Date;
+  workflowStage?: WorkflowStage;
+  openDealsCount?: number;
+  openTicketsCount?: number;
+  /**
+   * Backdates lastActivityAt / workflowStageChangedAt by this many days.
+   * Omit for "never contacted" -- the needs-attention scorer treats those
+   * differently (falls back to how long ago the record was created).
+   */
+  daysSinceActivity?: number;
+  /** Backdates createdAt by this many days. Omit to use "now" like every other seeded row. */
+  daysSinceCreated?: number;
+}
+
+const COMPANIES: CompanySeed[] = [
   {
     legalName: "Northwind Analytics, Inc.",
     dbaName: "Northwind",
@@ -97,6 +136,8 @@ const COMPANIES = [
     workflowStage: WorkflowStage.CONTACTED,
     openDealsCount: 2,
     openTicketsCount: 1,
+    // Healthy, recently touched -- should NOT surface in "needs attention".
+    daysSinceActivity: 3,
   },
   {
     legalName: "Cobalt Manufacturing Group Ltd.",
@@ -123,6 +164,8 @@ const COMPANIES = [
     workflowStage: WorkflowStage.CONTACTED,
     openDealsCount: 5,
     openTicketsCount: 7,
+    // AT_RISK plus a stale touch, high tier -- should rank near the top.
+    daysSinceActivity: 21,
   },
   {
     legalName: "Harbourline Logistics S.A.",
@@ -138,6 +181,9 @@ const COMPANIES = [
     billingCity: "Lisbon",
     billingCountry: "Portugal",
     locationCount: 6,
+    // Qualified, then went quiet for a month and a half.
+    workflowStage: WorkflowStage.QUALIFIED,
+    daysSinceActivity: 45,
   },
   {
     legalName: "Fernwood Family Dental PC",
@@ -154,6 +200,9 @@ const COMPANIES = [
     billingState: "RI",
     billingCountry: "USA",
     locationCount: 1,
+    // Never contacted, but only 5 days old -- inside the grace period, so
+    // it should NOT surface yet. Contrast with Redstone below.
+    daysSinceCreated: 5,
   },
   {
     legalName: "Meridian Capital Partners LLP",
@@ -170,6 +219,9 @@ const COMPANIES = [
     billingCity: "London",
     billingCountry: "United Kingdom",
     locationCount: 3,
+    // A proposal that's gone quiet -- exactly what the digest exists to catch.
+    workflowStage: WorkflowStage.PROPOSAL_SENT,
+    daysSinceActivity: 30,
   },
   {
     legalName: "Sunnyside Grocers Co-operative",
@@ -193,6 +245,8 @@ const COMPANIES = [
     customerSince: new Date("2024-09-30"),
     renewalDate: new Date("2026-09-30"),
     workflowStage: WorkflowStage.CONTACTED,
+    // Healthy -- should NOT surface.
+    daysSinceActivity: 5,
   },
   {
     legalName: "Atlas Grid Energy Corporation",
@@ -218,6 +272,9 @@ const COMPANIES = [
     renewalDate: new Date("2027-11-15"),
     workflowStage: WorkflowStage.CONTACTED,
     openDealsCount: 3,
+    // Highest tier in the seed and two months quiet -- should rank at or near
+    // the top even without an AT_RISK flag.
+    daysSinceActivity: 60,
   },
   {
     legalName: "Pinecrest Academy Trust",
@@ -233,6 +290,12 @@ const COMPANIES = [
     billingCity: "Dublin",
     billingCountry: "Ireland",
     locationCount: 9,
+    // Actively in negotiation, touched 12 days ago -- just under the 14-day
+    // staleness threshold, so this should sit right on the boundary and NOT
+    // surface. Useful for checking the threshold itself, not just the cases
+    // either side of it.
+    workflowStage: WorkflowStage.NEGOTIATION,
+    daysSinceActivity: 12,
   },
   {
     legalName: "Vantage Media Holdings",
@@ -249,6 +312,10 @@ const COMPANIES = [
     billingState: "NY",
     billingCountry: "USA",
     locationCount: 2,
+    // Closed and lost three months ago -- terminal stages are excluded from
+    // "needs attention" regardless of how stale they look.
+    workflowStage: WorkflowStage.CLOSED_LOST,
+    daysSinceActivity: 90,
   },
   {
     legalName: "Kestrel Cloud Services GmbH",
@@ -265,6 +332,9 @@ const COMPANIES = [
     billingCity: "Berlin",
     billingCountry: "Germany",
     locationCount: 1,
+    // Closed won long ago, since churned -- also terminal, also excluded.
+    workflowStage: WorkflowStage.CLOSED_WON,
+    daysSinceActivity: 120,
   },
   {
     legalName: "Orchard Hospitality Group",
@@ -280,6 +350,9 @@ const COMPANIES = [
     billingCity: "Singapore",
     billingCountry: "Singapore",
     locationCount: 63,
+    // High tier, fresh -- should NOT surface despite the tier weight.
+    workflowStage: WorkflowStage.QUALIFIED,
+    daysSinceActivity: 2,
   },
   {
     legalName: "Redstone Civil Engineering Ltd.",
@@ -293,6 +366,9 @@ const COMPANIES = [
     timeZone: "Australia/Sydney",
     billingCity: "Sydney",
     billingCountry: "Australia",
+    // Never contacted, sitting untouched for 75 days, and unclassified so no
+    // one owns it -- the single clearest "needs attention" case in the seed.
+    daysSinceCreated: 75,
   },
 ];
 
@@ -340,6 +416,10 @@ async function main() {
   }
   console.log(`  ${Object.keys(POOLS).length} assignment rules`);
 
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const daysAgo = (days: number) => new Date(now - days * DAY_MS);
+
   // Seeded companies are written directly (not via the service) so the seed is
   // idempotent and deterministic; tier still comes from the same pure function.
   let created = 0;
@@ -350,7 +430,7 @@ async function main() {
     });
     if (existing) continue;
 
-    const { industry, ...rest } = c;
+    const { industry, daysSinceActivity, daysSinceCreated, ...rest } = c;
     const tier = calculateTier({
       employeeBand: rest.employeeBand ?? null,
       annualRevenueExact: rest.annualRevenueExact ?? null,
@@ -374,6 +454,11 @@ async function main() {
       }
     }
 
+    // A stage change and a touch on the account are the same event for seed
+    // purposes -- a real write path would let these diverge, but nothing here
+    // needs that distinction.
+    const lastActivityAt = daysSinceActivity !== undefined ? daysAgo(daysSinceActivity) : null;
+
     await prisma.company.create({
       data: {
         ...rest,
@@ -383,9 +468,9 @@ async function main() {
         ownerId,
         ownerAssignedBy: ownerId ? AssignmentSource.AUTO : null,
         ownerAssignedAt: ownerId ? new Date() : null,
-        lastActivityAt: rest.workflowStage === WorkflowStage.CONTACTED ? new Date() : null,
-        workflowStageChangedAt:
-          rest.workflowStage === WorkflowStage.CONTACTED ? new Date() : null,
+        lastActivityAt,
+        workflowStageChangedAt: lastActivityAt,
+        ...(daysSinceCreated !== undefined ? { createdAt: daysAgo(daysSinceCreated) } : {}),
       },
     });
     created += 1;
